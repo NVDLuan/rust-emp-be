@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub redis_url: String,
     pub mqtt_broker: String,
+    pub mqtt_port: String,
     pub mqtt_client_id: String,
     pub auth_cookie: String,
     pub refresh_cookie: String,
@@ -19,7 +20,8 @@ impl Config {
         Self {
             database_url: Self::load_database_url(),
             redis_url: Self::load_redis_url(),
-            mqtt_broker: Self::load_mqtt_broker(),
+            mqtt_broker: get_env("MQTT_BROKER"),
+            mqtt_port: get_env("MQTT_PORT"),
             mqtt_client_id: get_env_or_default("MQTT_CLIENT_ID", "server_receiver"),
             auth_cookie: get_env_or_default("AUTH_COOKIE", "auth_token"),
             refresh_cookie: get_env_or_default("REFRESH_COOKIE", "refresh_token"),
@@ -62,16 +64,6 @@ impl Config {
             Some(pass) if !pass.is_empty() => format!("redis://:{}@{}:{}", pass, host, port),
             _ => format!("redis://{}:{}", host, port), 
         }
-    }
-
-    fn load_mqtt_broker() -> String {
-        if let Ok(url) = env::var("MQTT_BROKER") {
-            return url;
-        }
-
-        let host = get_env_or_default("MQTT_HOST", "localhost");
-        let port = get_env_or_default("MQTT_PORT", "1883");
-        format!("tcp://{}:{}", host, port)
     }
 }
 
