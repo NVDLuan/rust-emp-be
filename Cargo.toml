@@ -1,0 +1,13 @@
+[package]
+name = "emp-be"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenv = "0.15.0"
+sea-orm = { version = "2.0.0-rc.13", features = ["sqlx-postgres", "runtime-async-std-native-tls"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+actix-web = "4.11.0"
+redis = { version = "0.25", features = ["aio", "connection-manager", "async-std-comp"] }
+paho-mqtt = "0.12"
