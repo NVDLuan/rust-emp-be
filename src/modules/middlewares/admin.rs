@@ -1,6 +1,7 @@
 use crate::infra::database::postgres::DbPool;
 use crate::modules::user::model::Model as UserModel;
 use crate::modules::user::repository::repository::UserRepository;
+use crate::modules::user::roles::UserRole;
 use crate::config::security::SecurityConfig;
 use crate::errors::AppError;
 use actix_web::body::BoxBody;
@@ -19,34 +20,34 @@ struct Claims {
     iat: usize,   // Issued at
 }
 
-pub struct AuthMiddleware {
+pub struct AdminMiddleware {
     pub db: Rc<DbPool>,
 }
 
-impl<S> Transform<S, ServiceRequest> for AuthMiddleware
+impl<S> Transform<S, ServiceRequest> for AdminMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error> + 'static,
 {
     type Response = ServiceResponse<BoxBody>;
     type Error = Error;
-    type Transform = AuthMiddlewareService<S>;
+    type Transform = AdminMiddlewareService<S>;
     type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Ready<Result<Self::Transform, Self::InitError>> {
-        ok(AuthMiddlewareService {
+        ok(AdminMiddlewareService {
             service: Rc::new(service),
             db: self.db.clone(),
         })
     }
 }
 
-pub struct AuthMiddlewareService<S> {
+pub struct AdminMiddlewareService<S> {
     service: Rc<S>,
     db: Rc<DbPool>,
 }
 
-impl<S> Service<ServiceRequest> for AuthMiddlewareService<S>
+impl<S> Service<ServiceRequest> for AdminMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error> + 'static,
 {
@@ -63,16 +64,16 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            match get_user_from_request(&req, &db).await {
+            match get_admin_user_from_request(&req, &db).await {
                 Ok(user) => {
                     req.extensions_mut().insert(user);
                     service.call(req).await
                 }
                 Err(err) => {
-                    let response = HttpResponse::Unauthorized().json(serde_json::json!({
+                    let response = HttpResponse::Forbidden().json(serde_json::json!({
                         "success": false,
                         "message": err.to_string(),
-                        "error_code": "AUTH_ERROR",
+                        "error_code": "ADMIN_REQUIRED",
                         "details": None::<String>
                     })).map_into_boxed_body();
                     Ok(ServiceResponse::new(req.into_parts().0, response))
@@ -82,12 +83,21 @@ where
     }
 }
 
-async fn get_user_from_request(
+async fn get_admin_user_from_request(
     req: &ServiceRequest,
     db: &DbPool,
 ) -> Result<UserModel, AppError> {
     let token = extract_token_from_request(req)?;
-    get_user_from_token(&token, db).await
+    let user = get_user_from_token(&token, db).await?;
+
+    let user_role = UserRole::from_str(&user.role)
+        .ok_or_else(|| AppError::Forbidden("Invalid user role".to_string()))?;
+    
+    if !user_role.is_admin() {
+        return Err(AppError::Forbidden("Admin privileges required".to_string()));
+    }
+    
+    Ok(user)
 }
 
 fn extract_token_from_request(req: &ServiceRequest) -> Result<String, AppError> {
@@ -131,7 +141,14 @@ async fn get_user_from_token(token: &str, db: &DbPool) -> Result<UserModel, AppE
 
     // Token is valid, proceed to fetch the user by email
     let user_email = token_data.claims.sub;
-    UserRepository::get_user_by_email(db, &user_email)
+    let user = UserRepository::get_user_by_email(db, &user_email)
         .await
-        .map_err(|_| AppError::NotFound("User not found".to_string()))
+        .map_err(|_| AppError::NotFound("User not found".to_string()))?;
+    
+    // Check if user is active
+    if !user.is_active {
+        return Err(AppError::Forbidden("User account is deactivated".to_string()));
+    }
+    
+    Ok(user)
 }

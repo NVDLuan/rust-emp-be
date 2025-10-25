@@ -4,7 +4,7 @@ use utoipa_swagger_ui::SwaggerUi;
 mod middlewares;
 mod shared;
 mod system;
-mod user;
+pub mod user;
 
 pub fn handle_subscribe_message(topic: String, payload: Vec<u8>) {
     if topic.starts_with("system/") {
@@ -16,6 +16,9 @@ pub fn handle_subscribe_message(topic: String, payload: Vec<u8>) {
 
 pub fn init_routes(cfg: &mut web::ServiceConfig) {
     user::router::init_auth_routes(cfg);
+    
+    // Health check endpoint
+    cfg.route("/health", web::get().to(system::health::health_check));
 }
 
 

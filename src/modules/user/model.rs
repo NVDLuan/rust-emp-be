@@ -9,6 +9,8 @@ pub struct Model {
     pub name: String,
     pub email: String,
     pub password: String,
+    pub role: String,
+    pub is_active: bool,
     pub latest_login: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

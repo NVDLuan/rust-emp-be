@@ -1,15 +1,14 @@
 use crate::infra::database::postgres::DbPool;
 use crate::modules::user::schemas::schemas::{
-    ApiResponse, ChangePasswordRequest, ErrorResponse, ForgotPasswordRequest, LoginRequest,
+    ApiResponse, AdminCreateUserRequest, ChangePasswordRequest, ErrorResponse, ForgotPasswordRequest, LoginRequest,
     RefreshTokenRequest, RegisterUserRequest, ResetPasswordRequest, TokenResponse,
     UpdateProfileRequest, UserResponse,
 };
 use crate::modules::user::service::service::AuthService;
+use crate::errors::AppError;
 use actix_web::cookie::Cookie;
 use actix_web::{HttpRequest, HttpResponse, web};
-use serde_json::json;
 use tracing::info;
-use uuid::Uuid;
 
 // ===== USER REGISTRATION =====
 #[utoipa::path(
@@ -26,29 +25,44 @@ use uuid::Uuid;
 pub async fn register_user(
     pool: web::Data<DbPool>,
     user: web::Json<RegisterUserRequest>,
-) -> HttpResponse {
+) -> Result<HttpResponse, AppError> {
     let new_user = user.into_inner();
 
     match AuthService::register_user(pool.get_ref(), &new_user).await {
-        Ok(user_response) => HttpResponse::Created().json(ApiResponse {
+        Ok(user_response) => Ok(HttpResponse::Created().json(ApiResponse {
             success: true,
             message: "User registered successfully".to_string(),
             data: Some(user_response),
-        }),
-        Err(err) => {
-            let error_msg = if err.to_string().contains("already exists") {
-                "User with this email already exists"
-            } else {
-                "Failed to register user"
-            };
+        })),
+        Err(err) => Err(err),
+    }
+}
 
-            HttpResponse::BadRequest().json(ErrorResponse {
-                success: false,
-                message: error_msg.to_string(),
-                error_code: Some("REGISTRATION_FAILED".to_string()),
-                details: Some(err.to_string()),
-            })
-        }
+// ===== ADMIN CREATE USER =====
+#[utoipa::path(
+    post,
+    path = "/auth/admin/create-user",
+    tag = "Authentication",
+    request_body = AdminCreateUserRequest,
+    responses(
+        (status = 201, description = "User created successfully by admin", body = ApiResponse<UserResponse>),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 403, description = "Admin privileges required", body = ErrorResponse)
+    )
+)]
+pub async fn admin_create_user(
+    pool: web::Data<DbPool>,
+    user: web::Json<AdminCreateUserRequest>,
+) -> Result<HttpResponse, AppError> {
+    let new_user = user.into_inner();
+
+    match AuthService::admin_create_user(pool.get_ref(), &new_user).await {
+        Ok(user_response) => Ok(HttpResponse::Created().json(ApiResponse {
+            success: true,
+            message: "User created successfully by admin".to_string(),
+            data: Some(user_response),
+        })),
+        Err(err) => Err(err),
     }
 }
 
@@ -63,7 +77,7 @@ pub async fn register_user(
         (status = 401, description = "Invalid credentials", body = ErrorResponse)
     )
 )]
-pub async fn login(pool: web::Data<DbPool>, req: web::Json<LoginRequest>) -> HttpResponse {
+pub async fn login(pool: web::Data<DbPool>, req: web::Json<LoginRequest>) -> Result<HttpResponse, AppError> {
     info!("Handler: call login");
 
     match AuthService::login(pool.get_ref(), &req).await {
@@ -84,21 +98,16 @@ pub async fn login(pool: web::Data<DbPool>, req: web::Json<LoginRequest>) -> Htt
                 .max_age(actix_web::cookie::time::Duration::seconds(604800)) // 7 days
                 .finish();
 
-            HttpResponse::Ok()
+            Ok(HttpResponse::Ok()
                 .cookie(access_cookie)
                 .cookie(refresh_cookie)
                 .json(ApiResponse {
                     success: true,
                     message: "Login successful".to_string(),
                     data: Some(user_response),
-                })
+                }))
         }
-        Err(_) => HttpResponse::Unauthorized().json(ErrorResponse {
-            success: false,
-            message: "Invalid credentials".to_string(),
-            error_code: Some("INVALID_CREDENTIALS".to_string()),
-            details: None,
-        }),
+        Err(err) => Err(err),
     }
 }
 
@@ -116,7 +125,7 @@ pub async fn login(pool: web::Data<DbPool>, req: web::Json<LoginRequest>) -> Htt
 pub async fn refresh_token(
     pool: web::Data<DbPool>,
     req: web::Json<RefreshTokenRequest>,
-) -> HttpResponse {
+) -> Result<HttpResponse, AppError> {
     match AuthService::refresh_token(pool.get_ref(), &req).await {
         Ok(token_response) => {
             let access_cookie = Cookie::build("access_token", token_response.access_token.clone())
@@ -126,18 +135,13 @@ pub async fn refresh_token(
                 .max_age(actix_web::cookie::time::Duration::seconds(900))
                 .finish();
 
-            HttpResponse::Ok().cookie(access_cookie).json(ApiResponse {
+            Ok(HttpResponse::Ok().cookie(access_cookie).json(ApiResponse {
                 success: true,
                 message: "Token refreshed successfully".to_string(),
                 data: Some(token_response),
-            })
+            }))
         }
-        Err(_) => HttpResponse::Unauthorized().json(ErrorResponse {
-            success: false,
-            message: "Invalid refresh token".to_string(),
-            error_code: Some("INVALID_REFRESH_TOKEN".to_string()),
-            details: None,
-        }),
+        Err(err) => Err(err),
     }
 }
 
@@ -151,7 +155,7 @@ pub async fn refresh_token(
         (status = 401, description = "Unauthorized", body = ErrorResponse)
     )
 )]
-pub async fn logout(pool: web::Data<DbPool>, req: HttpRequest) -> HttpResponse {
+pub async fn logout(_pool: web::Data<DbPool>, _req: HttpRequest) -> HttpResponse {
     // In a real implementation, you would extract user ID from JWT token
     // For now, we'll just clear the cookies
     let access_cookie = Cookie::build("access_token", "")
@@ -215,7 +219,7 @@ pub async fn get_all_users(pool: web::Data<DbPool>) -> HttpResponse {
         (status = 404, description = "User not found", body = ErrorResponse)
     )
 )]
-pub async fn get_profile(pool: web::Data<DbPool>, req: HttpRequest) -> HttpResponse {
+pub async fn get_profile(_pool: web::Data<DbPool>, _req: HttpRequest) -> HttpResponse {
     // In a real implementation, you would extract user ID from JWT token
     // For now, we'll return an error
     HttpResponse::Unauthorized().json(ErrorResponse {
@@ -239,9 +243,9 @@ pub async fn get_profile(pool: web::Data<DbPool>, req: HttpRequest) -> HttpRespo
     )
 )]
 pub async fn update_profile(
-    pool: web::Data<DbPool>,
-    req: HttpRequest,
-    update_data: web::Json<UpdateProfileRequest>,
+    _pool: web::Data<DbPool>,
+    _req: HttpRequest,
+    _update_data: web::Json<UpdateProfileRequest>,
 ) -> HttpResponse {
     // In a real implementation, you would extract user ID from JWT token
     HttpResponse::Unauthorized().json(ErrorResponse {
@@ -265,9 +269,9 @@ pub async fn update_profile(
     )
 )]
 pub async fn change_password(
-    pool: web::Data<DbPool>,
-    req: HttpRequest,
-    change_data: web::Json<ChangePasswordRequest>,
+    _pool: web::Data<DbPool>,
+    _req: HttpRequest,
+    _change_data: web::Json<ChangePasswordRequest>,
 ) -> HttpResponse {
     // In a real implementation, you would extract user ID from JWT token
     HttpResponse::Unauthorized().json(ErrorResponse {

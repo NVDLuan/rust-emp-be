@@ -20,7 +20,7 @@ impl Config {
         Self {
             database_url: Self::load_database_url(),
             redis_url: Self::load_redis_url(),
-            mqtt_broker: get_env("MQTT_BROKER"),
+            mqtt_broker: get_env("MQTT_HOST"),
             mqtt_port: get_env("MQTT_PORT"),
             mqtt_client_id: get_env_or_default("MQTT_CLIENT_ID", "server_receiver"),
             auth_cookie: get_env_or_default("AUTH_COOKIE", "auth_token"),

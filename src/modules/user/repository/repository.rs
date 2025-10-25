@@ -12,11 +12,14 @@ impl UserRepository {
         name: &str,
         email: &str,
         password: &str,
+        role: &str,
     ) -> Result<UserModel, sea_orm::DbErr> {
         let user = UserActiveModel {
             name: Set(name.to_string()),
             email: Set(email.to_string()),
             password: Set(password.to_string()),
+            role: Set(role.to_string()),
+            is_active: Set(true),
             ..Default::default()
         };
 

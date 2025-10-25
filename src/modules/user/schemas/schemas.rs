@@ -11,6 +11,14 @@ pub struct RegisterUserRequest {
 }
 
 #[derive(Deserialize, ToSchema)]
+pub struct AdminCreateUserRequest {
+    pub name: String,
+    pub email: String,
+    pub password: String,
+    pub role: Option<String>, // Default to "user" if not provided
+}
+
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
@@ -44,11 +52,13 @@ pub struct UpdateProfileRequest {
     pub email: Option<String>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct UserResponse {
     pub id: Uuid,
     pub name: String,
     pub email: String,
+    pub role: String,
+    pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub latest_login:  Option<DateTime<Utc>>,

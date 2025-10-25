@@ -3,6 +3,10 @@ name = "emp-be"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "create_admin"
+path = "src/bin/create_admin.rs"
+
 [dependencies]
 dotenv = "0.15.0"
 sea-orm = { version = "2.0.0-rc.13", features = ["sqlx-postgres", "runtime-async-std-native-tls"] }
@@ -12,7 +16,7 @@ actix-web = "4.11.0"
 redis = { version = "0.25", features = ["aio", "connection-manager", "async-std-comp"] }
 rumqttc = "0.24"
 serde_json = "1.0"
-tokio = "1.48.0"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros"] }
 log = "0.4.28"
 serde = { version = "1.0.228", features = ["derive"] }
 uuid = { version = "1.18.1", features = ["v4"] }
@@ -27,3 +31,9 @@ regex = "1.12.2"
 
 utoipa = { version = "5.4.0", features = ["actix_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "7.1.1-rc.0", features = ["actix-web"] }
+
+thiserror = "1.0"
+validator = { version = "0.18", features = ["derive"] }
+anyhow = "1.0"
+
+tower-http = { version = "0.5", features = ["cors", "trace"] }

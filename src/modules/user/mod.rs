@@ -1,8 +1,9 @@
 mod handler;
-mod model;
+pub mod model;
 pub mod openapi;
-mod repository;
+pub mod repository;
+pub mod roles;
 pub mod router;
-mod schemas;
-mod service;
-mod utils;
+pub mod schemas;
+pub mod service;
+pub mod utils;
